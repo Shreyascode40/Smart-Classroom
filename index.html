@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Smart Classroom Dashboard</title>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+  .navbar{background:#1e293b;padding:16px 32px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155}
+  .nav-brand{display:flex;align-items:center;gap:12px}
+  .nav-logo{width:40px;height:40px;background:linear-gradient(135deg,#06b6d4,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .nav-title{font-size:18px;font-weight:700;color:#f1f5f9}
+  .nav-sub{font-size:12px;color:#94a3b8}
+  .live-badge{display:flex;align-items:center;gap:8px;background:#064e3b;padding:6px 14px;border-radius:20px;font-size:13px;color:#34d399}
+  .live-dot{width:8px;height:8px;background:#34d399;border-radius:50%;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  .container{max-width:1200px;margin:0 auto;padding:24px}
+  .alert-bar{padding:12px 20px;border-radius:10px;margin-bottom:20px;font-size:14px;display:flex;align-items:center;gap:10px;display:none}
+  .alert-good{background:#064e3b;border:1px solid #065f46;color:#34d399}
+  .alert-warn{background:#451a03;border:1px solid #78350f;color:#fbbf24}
+  .alert-danger{background:#450a0a;border:1px solid #7f1d1d;color:#f87171}
+  .sensor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+  .scard{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:20px;position:relative;overflow:hidden}
+  .scard::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+  .scard.temp::before{background:linear-gradient(90deg,#f97316,#ef4444)}
+  .scard.hum::before{background:linear-gradient(90deg,#3b82f6,#06b6d4)}
+  .scard.air::before{background:linear-gradient(90deg,#8b5cf6,#a78bfa)}
+  .scard.buzz::before{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+  .scard-icon{font-size:28px;margin-bottom:10px}
+  .scard-label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+  .scard-value{font-size:32px;font-weight:700;color:#f1f5f9;line-height:1}
+  .scard-unit{font-size:13px;color:#94a3b8;margin-top:4px}
+  .scard-status{font-size:12px;margin-top:8px;padding:3px 10px;border-radius:20px;display:inline-block}
+  .status-good{background:#064e3b;color:#34d399}
+  .status-warn{background:#451a03;color:#fbbf24}
+  .status-bad{background:#450a0a;color:#f87171}
+  .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .panel{background:#1e293b;border:1px solid #334155;border-radius:16px;padding:20px}
+  .panel-header{font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+  .device-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #1e293b}
+  .device-row:last-child{border-bottom:none}
+  .device-info{display:flex;align-items:center;gap:12px}
+  .device-icon{width:36px;height:36px;background:#0f172a;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .device-name{font-size:14px;font-weight:500;color:#e2e8f0}
+  .device-state{font-size:11px;margin-top:2px}
+  .state-on{color:#34d399}
+  .state-off{color:#64748b}
+  .toggle{position:relative;width:48px;height:26px;cursor:pointer}
+  .toggle input{opacity:0;width:0;height:0;position:absolute}
+  .tog-slider{position:absolute;top:0;left:0;right:0;bottom:0;background:#334155;border-radius:13px;transition:0.3s}
+  .tog-slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;bottom:3px;background:#94a3b8;border-radius:50%;transition:0.3s}
+  input:checked+.tog-slider{background:linear-gradient(135deg,#06b6d4,#3b82f6)}
+  input:checked+.tog-slider:before{transform:translateX(22px);background:white}
+  .log-area{height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .log-area::-webkit-scrollbar{width:4px}
+  .log-area::-webkit-scrollbar-track{background:#0f172a}
+  .log-area::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+  .log-entry{display:flex;gap:10px;font-size:12px;align-items:flex-start}
+  .log-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;flex-shrink:0}
+  .log-time{color:#475569;min-width:58px}
+  .log-text{color:#cbd5e1}
+  .footer{text-align:center;padding:20px;color:#475569;font-size:12px;margin-top:10px}
+  @media(max-width:768px){
+    .sensor-grid{grid-template-columns:repeat(2,1fr)}
+    .bottom-grid{grid-template-columns:1fr}
+    .container{padding:16px}
+  }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <div class="nav-brand">
+    <div class="nav-logo">🏫</div>
+    <div>
+      <div class="nav-title">Smart Classroom</div>
+      <div class="nav-sub">IoT Automation Dashboard</div>
+    </div>
+  </div>
+  <div class="live-badge">
+    <div class="live-dot"></div>
+    <span id="liveText">Connecting...</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="alert-bar alert-good" id="alertBar">
+    <span id="alertIcon">✅</span>
+    <span id="alertMsg">All systems normal</span>
+  </div>
+
+  <div class="sensor-grid">
+    <div class="scard temp">
+      <div class="scard-icon">🌡️</div>
+      <div class="scard-label">Temperature</div>
+      <div class="scard-value" id="tempVal">--</div>
+      <div class="scard-unit">degrees Celsius</div>
+      <div class="scard-status status-good" id="tempStatus">Normal</div>
+    </div>
+    <div class="scard hum">
+      <div class="scard-icon">💧</div>
+      <div class="scard-label">Humidity</div>
+      <div class="scard-value" id="humVal">--</div>
+      <div class="scard-unit">percent RH</div>
+      <div class="scard-status status-good" id="humStatus">Normal</div>
+    </div>
+    <div class="scard air">
+      <div class="scard-icon">💨</div>
+      <div class="scard-label">Air Quality</div>
+      <div class="scard-value" id="airVal">--</div>
+      <div class="scard-unit">AQI value</div>
+      <div class="scard-status" id="airStatus">Reading...</div>
+    </div>
+    <div class="scard buzz">
+      <div class="scard-icon">🔔</div>
+      <div class="scard-label">Buzzer Alert</div>
+      <div class="scard-value" style="font-size:18px;padding-top:8px" id="buzzerVal">Standby</div>
+      <div class="scard-unit" id="buzzerSub">No active alert</div>
+      <div class="scard-status status-good" id="buzzerStatus">Safe</div>
+    </div>
+  </div>
+
+  <div class="bottom-grid">
+    <div class="panel">
+      <div class="panel-header">⚡ Device Controls</div>
+
+      <div class="device-row">
+        <div class="device-info">
+          <div class="device-icon">💡</div>
+          <div>
+            <div class="device-name">Classroom Light</div>
+            <div class="device-state state-off" id="light-state">OFF</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="tog-light" onchange="control('light',this.checked)">
+          <span class="tog-slider"></span>
+        </label>
+      </div>
+
+      <div class="device-row">
+        <div class="device-info">
+          <div class="device-icon">🌀</div>
+          <div>
+            <div class="device-name">Fan 1</div>
+            <div class="device-state state-off" id="fan1-state">OFF</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="tog-fan1" onchange="control('fan1',this.checked)">
+          <span class="tog-slider"></span>
+        </label>
+      </div>
+
+      <div class="device-row">
+        <div class="device-info">
+          <div class="device-icon">🌀</div>
+          <div>
+            <div class="device-name">Fan 2</div>
+            <div class="device-state state-off" id="fan2-state">OFF</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="tog-fan2" onchange="control('fan2',this.checked)">
+          <span class="tog-slider"></span>
+        </label>
+      </div>
+
+      <div class="device-row">
+        <div class="device-info">
+          <div class="device-icon">🌀</div>
+          <div>
+            <div class="device-name">Fan 3</div>
+            <div class="device-state state-off" id="fan3-state">OFF</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="tog-fan3" onchange="control('fan3',this.checked)">
+          <span class="tog-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">📋 Activity Log</div>
+      <div class="log-area" id="logArea"></div>
+    </div>
+  </div>
+
+  <div class="footer">Smart Classroom IoT System — ESP32 + Firebase + Alexa</div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBvT0KHRrr_6Pcj-LV68xYqG1glK6iW2cQ",
+  authDomain: "smartclassroom-2df63.firebaseapp.com",
+  databaseURL: "https://smartclassroom-2df63-default-rtdb.firebaseio.com",
+  projectId: "smartclassroom-2df63",
+  storageBucket: "smartclassroom-2df63.firebasestorage.app",
+  messagingSenderId: "49584371329",
+  appId: "1:49584371329:web:5b0f3dc898611100b0ff80"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const logs = [];
+function addLog(msg, color) {
+  const now = new Date();
+  const t = now.getHours().toString().padStart(2,'0') + ':' +
+            now.getMinutes().toString().padStart(2,'0') + ':' +
+            now.getSeconds().toString().padStart(2,'0');
+  logs.unshift({t, msg, color});
+  if(logs.length > 50) logs.pop();
+  document.getElementById('logArea').innerHTML = logs.map(l =>
+    `<div class="log-entry">
+      <div class="log-dot" style="background:${l.color}"></div>
+      <span class="log-time">${l.t}</span>
+      <span class="log-text">${l.msg}</span>
+    </div>`
+  ).join('');
+}
+
+// Read live sensor data
+db.ref('/sensors').on('value', snap => {
+  const d = snap.val();
+  if(!d) return;
+
+  document.getElementById('liveText').textContent = 'Live';
+  document.getElementById('alertBar').style.display = 'flex';
+
+  const temp = d.temperature ? d.temperature.toFixed(1) : '--';
+  const hum  = d.humidity    ? d.humidity.toFixed(1)    : '--';
+  const air  = d.airquality  || '--';
+
+  document.getElementById('tempVal').textContent = temp;
+  document.getElementById('humVal').textContent  = hum;
+  document.getElementById('airVal').textContent  = air;
+
+  // Temperature status
+  const tNum = parseFloat(temp);
+  const tEl  = document.getElementById('tempStatus');
+  if(tNum > 35){tEl.textContent='Very Hot';tEl.className='scard-status status-bad';}
+  else if(tNum > 30){tEl.textContent='Hot';tEl.className='scard-status status-warn';}
+  else{tEl.textContent='Normal';tEl.className='scard-status status-good';}
+
+  // Air quality status
+  const aEl = document.getElementById('airStatus');
+  const aNum = parseInt(air);
+  if(aNum > 400){
+    aEl.textContent='Poor — Alert!';aEl.className='scard-status status-bad';
+    document.getElementById('alertBar').className='alert-bar alert-danger';
+    document.getElementById('alertIcon').textContent='🚨';
+    document.getElementById('alertMsg').textContent='Poor air quality! Buzzer is active. Open windows immediately!';
+    document.getElementById('buzzerVal').textContent='ALERT!';
+    document.getElementById('buzzerStatus').textContent='Active';
+    document.getElementById('buzzerStatus').className='scard-status status-bad';
+    addLog('ALERT: Poor air quality detected!','#f87171');
+  } else if(aNum > 300){
+    aEl.textContent='Moderate';aEl.className='scard-status status-warn';
+    document.getElementById('alertBar').className='alert-bar alert-warn';
+    document.getElementById('alertIcon').textContent='⚠️';
+    document.getElementById('alertMsg').textContent='Air quality is moderate. Monitor closely.';
+  } else {
+    aEl.textContent='Good';aEl.className='scard-status status-good';
+    document.getElementById('alertBar').className='alert-bar alert-good';
+    document.getElementById('alertIcon').textContent='✅';
+    document.getElementById('alertMsg').textContent='All systems normal. Classroom environment is healthy.';
+    document.getElementById('buzzerVal').textContent='Normal';
+    document.getElementById('buzzerStatus').textContent='Safe';
+    document.getElementById('buzzerStatus').className='scard-status status-good';
+  }
+});
+
+// Read device states live
+db.ref('/controls').on('value', snap => {
+  const d = snap.val();
+  if(!d) return;
+  ['light','fan1','fan2','fan3'].forEach(dev => {
+    const state = d[dev] || false;
+    const tog = document.getElementById('tog-'+dev);
+    const stateEl = document.getElementById(dev+'-state');
+    if(tog) tog.checked = state;
+    if(stateEl){
+      stateEl.textContent = state ? 'ON' : 'OFF';
+      stateEl.className = state ? 'device-state state-on' : 'device-state state-off';
+    }
+  });
+});
+
+// Send command to Firebase
+function control(device, state) {
+  db.ref('/controls/'+device).set(state);
+  addLog((device.charAt(0).toUpperCase()+device.slice(1))+' turned '+(state?'ON':'OFF'), state?'#34d399':'#f87171');
+}
+
+addLog('Dashboard loaded successfully','#34d399');
+addLog('Waiting for ESP32 sensor data...','#94a3b8');
+</script>
+</body>
+</html>
